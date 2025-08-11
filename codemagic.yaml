@@ -1,0 +1,52 @@
+workflows:
+  ios_release:
+    name: iOS Release
+    max_build_duration: 60
+    environment:
+      vars:
+        # Set this in Codemagic UI as an environment variable (or hardcode here)
+        BASE_URL: "https://beetle-driven-flea.ngrok-free.app"
+        BUNDLE_ID: "com.rdatanet.eddytracker"
+        APP_NAME: "EddyTracker"
+      flutter: stable
+      xcode: latest
+    scripts:
+      - name: Flutter pub get
+        script: flutter pub get
+      - name: Ensure iOS platform folder exists
+        script: |
+          if [ ! -d "ios" ]; then
+            flutter create .
+          fi
+      - name: Bump app version (optional)
+        script: |
+          # Example: set version 1.0.0+1
+          flutter pub run cider version 1.0.0+1 || true
+      - name: Set iOS bundle identifier & display name
+        script: |
+          # Change bundle id in project file
+          PBXPROJ="ios/Runner.xcodeproj/project.pbxproj"
+          /usr/bin/sed -i '' "s/PRODUCT_BUNDLE_IDENTIFIER = .*;/PRODUCT_BUNDLE_IDENTIFIER = ${BUNDLE_ID};/g" "$PBXPROJ"
+          # Update display name
+          PLIST="ios/Runner/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleName ${APP_NAME}" "$PLIST" || \
+            /usr/libexec/PlistBuddy -c "Add :CFBundleName string ${APP_NAME}" "$PLIST"
+      - name: iOS CocoaPods
+        script: |
+          cd ios
+          pod repo update
+          pod install
+          cd ..
+      - name: Flutter build ipa (release)
+        script: |
+          flutter build ipa \
+            --release \
+            --no-tree-shake-icons \
+            --dart-define=BASE_URL=${BASE_URL}
+    publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY        # configure in Codemagic UI
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER      # configure in Codemagic UI
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID        # configure in Codemagic UI
+        submit_to_testflight: true
+        submit_to_app_store: false
